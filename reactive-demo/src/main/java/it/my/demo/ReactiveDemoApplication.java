@@ -17,38 +17,44 @@ import reactor.core.Disposable;
 public class ReactiveDemoApplication implements ApplicationRunner {
 
 	public static void main(String[] args) {
-		SpringApplication.run(ReactiveDemoApplication.class, args);
+		SpringApplication.run(ReactiveDemoApplication.class, args).close();
 	}
 
 	@Override
 	public void run(ApplicationArguments args) throws Exception {
-		
+
 		List<String> inbox = new ArrayList<>();
-		
+
 		WebClient cli = WebClient.create();
 		fillInbox(inbox, cli);
 		System.out.println("Emptying inbox to fill a second time!");
 		inbox.clear();
 		fillInbox(inbox, cli);
 
+		System.out.println("Now listening to the emitter for a minute");
+		WebClient listener = WebClient.create("http://localhost:8080/reactive/emitter");
+		Disposable d2 = listener.get().retrieve().bodyToFlux(String.class).subscribe(m -> {
+			System.out.println(m);
+		});
+
+		Thread.sleep(60000);
+		d2.dispose();
+
+		System.out.println("Minute passed, stopping the listener");
+		System.out.println("Goodbye cruel world!");
 	}
 
 	private void fillInbox(List<String> inbox, WebClient cli) {
-		Disposable d = cli
-		.get()
-		.uri("http://localhost:8080/reactive/messages")
-		.retrieve()
-		.bodyToFlux(String.class)
-		.subscribe(m ->{
-			System.out.println(m);
-			inbox.add(m);
-			}
-		);
+		Disposable d = cli.get().uri("http://localhost:8080/reactive/messages").retrieve().bodyToFlux(String.class)
+				.subscribe(m -> {
+					System.out.println(m);
+					inbox.add(m);
+				});
 
 		System.out.println("Subscribed to reactive endpoint");
-		
-		while(!d.isDisposed()) {
-			if(inbox.size() >= 10) {
+
+		while (!d.isDisposed()) {
+			if (inbox.size() >= 10) {
 				System.out.println("Inbox contains " + inbox.size() + ", unsubscribing!");
 				d.dispose();
 			}
